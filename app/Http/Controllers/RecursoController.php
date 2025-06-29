@@ -3,70 +3,70 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Models\Recurso;
+use App\Models\Reserva;
 
 class RecursoController extends Controller
 {
     public function index(Request $request)
     {
-        // Paginação Padrão
-        // Cada Página vai mostrar 10 recursos
-        $perPage = 10;
-        // Pega o número da página que o usuário pediu na URL
-        $page = $request->get('page', 1);
-        // Se o usuário não enviar nada, usa 1 como padrão
-        $offset = ($page - 1) * $perPage;
+        try {
+            // Configuração da paginação
+            $perPage = 10; // Recursos por página
+            $page = $request->get('page', 1); // Página atual (padrão: 1)
+            $offset = ($page - 1) * $perPage; // Calcular offset para SQL
 
-        // Buscando os registros ativos
-        $recursos = DB::select("
-        SELECT * FROM recursos
-        WHERE ativo = 1 LIMIT ? OFFSET ?",
-        [$perPage, $offset] 
-    );
-        // Contando o total para paginação
-        $total = DB::select("
-            SELECT COUNT(*) as total 
-            FROM recursos WHERE ativo = 1")[0]->total; 
-        
-        // Retornando a reposta pra requisição
-        return response()->json([
-            'recursos' => $recursos,
-            'total_registros' => $total,
-            'por_pagina' => $perPage,
-            'pagina_atual' => $page,
+            // Buscar recursos ativos com paginação
+            $recursos = Recurso::buscarAtivosComPaginacao($perPage, $offset);
+            
+            // Contar total para informações de paginação
+            $total = Recurso::contarAtivos();
+            
+            // Montar resposta com dados e metadados de paginação
+            return response()->json([
+                'recursos' => $recursos,
+                'total_registros' => $total,
+                'por_pagina' => $perPage,
+                'pagina_atual' => $page,
+                'ultima_pagina' => ceil($total / $perPage) // Arredondar para cima
+            ]);
 
-        // ceil é uma função php que arredonda pra cima
-        'ultima_pagina' => ceil($total / $perPage)
-        ]);
-}
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erro ao buscar recursos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function disponibilidade($id, Request $request)
     {
-        // Verifica se a requisição tem o campo data e se está no formato correto
-        $request->validate([
-            'data' => 'required|date_format:Y-m-d'
-        ],[
-            'data.required' => 'A data é obrigatória',
-            'data.date_format' => 'A data deve estar no formato AAAA-MM-DD'
-        ]);
-        // Pega o valor da data enviada na requisção
-        $data = $request->get('data');
+        try {
+            // Validar formato da data
+            $request->validate([
+                'data' => 'required|date_format:Y-m-d'
+            ],[
+                'data.required' => 'A data é obrigatória',
+                'data.date_format' => 'A data deve estar no formato AAAA-MM-DD'
+            ]);
+            
+            $data = $request->get('data');
 
-        // Buscar reservas do recurso na data específica
-        $reservas = DB::select("
-            SELECT data_inicio, data_fim
-            FROM reservas
-            WHERE recurso_id = ?
-            AND DATE(data_inicio) = ?
-            ORDER BY data_inicio",
-            [$id, $data]
-        );
+            // Buscar horários já reservados para o recurso na data
+            $reservas = Reserva::buscarPorRecursoEData($id, $data);
 
-        // Retornando a resposta pra requisição
-        return response()->json([
-            'recurso_id' => $id,
-            'data' => $data,
-            'horarios_ocupados' => $reservas
-        ]);
+            // Retornar lista de horários ocupados
+            return response()->json([
+                'recurso_id' => $id,
+                'data' => $data,
+                'horarios_ocupados' => $reservas
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erro ao verificar disponibilidade',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
