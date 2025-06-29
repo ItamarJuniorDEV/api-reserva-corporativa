@@ -69,4 +69,78 @@ class ReservaController extends Controller
             'message' => 'Reserva cancelada com sucesso'
         ]);
     }
+
+    public function store(Request $request){
+
+        // Validar dados básicos
+        $request->validate([
+            'recurso_id' => 'required|integer',
+            'data_inicio' => 'required|date_format:Y-m-d H:i:s',
+            'data_fim' => 'required|date_format:Y-m-d H:i:s|after:data_inicio'
+        ], [
+            'recurso_id.required' => 'O recurso é obrigatório',
+            'data_inicio.required' => 'Data de início é obrigatória',
+            'data_inicio.date_format' => 'Data início deve estar no formato Y-m-d H:i:s',
+            'data_fim.required' => 'Data de fim é obrigatória',
+            'data_fim.date_format' => 'Data fim deve estar no formato Y-m-d H:i:s',
+            'data_fim.after' => 'Data final deve ser depois da data início'
+        ]);
+
+        // Pega os dados enviados na requisição (Id do usuário, recurso, data início e fim)
+        $userId = $request->user()->id;
+        $recursoId = $request->recurso_id;
+        $dataInicio = $request->data_inicio;
+        $dataFim = $request->data_fim;
+        
+        // Verificar se o recurso existe e se está ativo
+        $recurso = DB::select("
+            SELECT * FROM recursos
+            WHERE id = ? AND ativo = 1",
+            [$recursoId]
+    );
+        if (empty($recurso)) {
+            return response()->json([
+                'message' => 'Recurso não encontrado ou inativo'
+            ], 404);
+        }
+
+        // Validar regras de negócio
+        // Não pode ser no passado
+        if (strtotime($dataInicio) < time()) {
+            return response()->json([
+                'message' => 'Não é possivel reservar no passado'
+            ], 422);
+        }
+
+        // Verificar conflitos
+        $conflitos = DB::select("
+            SELECT COUNT(*) as total
+            FROM reservas
+            WHERE recurso_id = ?
+            AND ((data_inicio < ? AND data_fim > ?)
+                OR (data_inicio < ? AND data_fim > ?)
+                OR (data_inicio >= ? AND data_fim <= ?))",
+            [$recursoId, $dataFim, $dataInicio, $dataFim, $dataFim, $dataInicio, $dataFim]
+        );
+
+        if ($conflitos[0]->total > 0) {
+            return response()->json([
+                'message' => 'Já existe uma reserva neste horário'
+            ], 409); 
+        }
+
+        // Criar a reserva
+        DB::insert("
+            INSERT INTO reservas (recurso_id, usuario_id, data_inicio, data_fim, created_at, updated_at)
+            VALUES (?, ?, ?, ?, NOW(), NOW())",
+            [$recursoId, $userId, $dataInicio, $dataFim]
+    );
+        // Pegar o ID da reserva criada
+        $reservaId = DB::getPdo()->lastInsertId();
+
+        return response()->json([
+            'message' => 'Reserva criada com sucesso',
+            'reserva_id' => $reservaId
+        ], 201);
+    }
 }

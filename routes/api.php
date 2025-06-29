@@ -27,6 +27,8 @@ Route::middleware('auth:sanctum')->group(function() {
     // Reservas
     Route::get('/reservas/minhas', [ReservaController::class, 'minhasReservas']);
     Route::delete('/reservas/{id}', [ReservaController::class, 'destroy']);
+    Route::post('/reservas', [ReservaController::class, 'store']);
+
 });
 
 
