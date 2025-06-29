@@ -13,37 +13,41 @@ class RecursoController extends Controller
         // Cada Página vai mostrar 10 recursos
         $perPage = 10;
         // Pega o número da página que o usuário pediu na URL
-        $page = $request->get('page', 1)
+        $page = $request->get('page', 1);
         // Se o usuário não enviar nada, usa 1 como padrão
         $offset = ($page - 1) * $perPage;
 
         // Buscando os registros ativos
         $recursos = DB::select("
-            SELECT * FROM recursos
-            WHERE ativo = 1 LIMIT ? OFFSET ?",
-            [$perPage, $offset] 
+        SELECT * FROM recursos
+        WHERE ativo = 1 LIMIT ? OFFSET ?",
+        [$perPage, $offset] 
     );
         // Contando o total para paginação
-        $total = DB:select("
+        $total = DB::select("
             SELECT COUNT(*) as total 
-            FROM recursos WHERE ativo = 1")
-            [0]->total;
+            FROM recursos WHERE ativo = 1")[0]->total; 
         
         // Retornando a reposta pra requisição
-        'recursos' => $recursos,
-        'total_registros' => $total,
-        'por_pagina' => $perPage,
-        'pagina_atual' => $page,
+        return response()->json([
+            'recursos' => $recursos,
+            'total_registros' => $total,
+            'por_pagina' => $perPage,
+            'pagina_atual' => $page,
 
         // ceil é uma função php que arredonda pra cima
-        'ultima_pagina' => ceil($total / $page)
-    }
+        'ultima_pagina' => ceil($total / $perPage)
+        ]);
+}
 
     public function disponibilidade($id, Request $request)
     {
         // Verifica se a requisição tem o campo data e se está no formato correto
         $request->validate([
             'data' => 'required|date_format:Y-m-d'
+        ],[
+            'data.required' => 'A data é obrigatória',
+            'data.date_format' => 'A data deve estar no formato AAAA-MM-DD'
         ]);
         // Pega o valor da data enviada na requisção
         $data = $request->get('data');
@@ -59,7 +63,7 @@ class RecursoController extends Controller
         );
 
         // Retornando a resposta pra requisição
-        return response->json([
+        return response()->json([
             'recurso_id' => $id,
             'data' => $data,
             'horarios_ocupados' => $reservas
